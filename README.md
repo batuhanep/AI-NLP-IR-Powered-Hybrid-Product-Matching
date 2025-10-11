@@ -1,6 +1,6 @@
 # AI, NLP & IR Powered Hybrid Product Matching
 
-This repository contains a robust Python script designed for high-accuracy product matching and deduplication between two separate product catalogs (e.g., from two different e-commerce platforms like Migros and Getir). Utilizing techniques from Artificial Intelligence (AI), Natural Language Processing (NLP), and Information Retrieval (IR), the script employs a hybrid approach, combining semantic similarity (Sentence Transformers - S-BERT) for conceptual understanding with lexical matching (BM25) for keyword relevance, and further enhances accuracy using volume and unit validation. The use of FAISS ensures fast and scalable retrieval of candidates.
+This repository contains a robust Python script designed for high-accuracy product matching and deduplication between two separate product catalogs from two different e-commerce platforms. Utilizing techniques from Artificial Intelligence (AI), Natural Language Processing (NLP), and Information Retrieval (IR), the script employs a hybrid approach, combining semantic similarity (Sentence Transformers - S-BERT) for conceptual understanding with lexical matching (BM25) for keyword relevance, and further enhances accuracy using volume and unit validation. The use of FAISS ensures fast and scalable retrieval of candidates.
 
 ## Key Features
 
