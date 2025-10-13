@@ -2,7 +2,7 @@ import pandas as pd
 import re
 from tqdm import tqdm
 from sentence_transformers import SentenceTransformer
-from rank_bm25 import BM25Okapi  # TF-IDF yerine BM25 için import edildi
+from rank_bm25 import BM25Okapi  
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import faiss
@@ -12,10 +12,10 @@ import faiss
 def extract_volume(text):
     text = str(text).lower()
     patterns = [
-        r'(\d+)\s*(adet|pcs|pieces|tane|units|unit)', r'(\d+)\s*\'\s*(li|lı)\s*(paket)?',
-        r'(\d+)\s*x\s*(\d+(?:[\.,]\d+)?)\s*(gb|mb|cl|g|gm|mg|ml|l|kg|oz|lb|fl oz)',
-        r'(\d+(?:[\.,]\d+)?)\s*-\s*\d+(?:[\.,]\d+)?\s*(gb|mb|cl|g|gm|mg|ml|l|kg|oz|lb|fl oz)',
-        r'(\d+(?:[\.,]\d+)?)\s*(gb|mb|cl|g|gm|mg|ml|l|kg|oz|lb|fl oz)'
+        r'(\d+)\s*(adet|pcs|pieces|tane|units|unit|kutu|paket|şişe|poşet|kavanoz|rulo|koli|pack|box|bottle|can|jar|roll|dozen|case)', r'(\d+)\s*\'\s*(li|lı|lü|lu)\s*(paket|kutu|koli)?',
+        r'(\d+)\s*[x*]\s*(\d+(?:[\.,]\d+)?)\s*(gb|mb|cl|g|gr|gm|mg|ml|l|lt|cc|kg|oz|lb|fl oz|gram|kilogram|litre|liter|mililitre|milliliter|m|cm|mm|metre|meter|santimetre|centimeter|tb|w|v|mah|kw|kcal)',
+        r'(\d+(?:[\.,]\d+)?)\s*-\s*\d+(?:[\.,]\d+)?\s*(gb|mb|cl|g|gr|gm|mg|ml|l|lt|cc|kg|oz|lb|fl oz|gram|kilogram|litre|liter|mililitre|milliliter|m|cm|mm|metre|meter|santimetre|centimeter|tb|w|v|mah|kw|kcal)',
+        r'(\d+(?:[\.,]\d+)?)\s*(gb|mb|cl|g|gr|gm|mg|ml|l|lt|cc|kg|oz|lb|fl oz|gram|kilogram|litre|liter|mililitre|milliliter|m|cm|mm|metre|meter|santimetre|centimeter|tb|w|v|mah|kw|kcal)'
     ]
     for i, pattern in enumerate(patterns):
         match = re.search(pattern, text)
@@ -29,9 +29,9 @@ def extract_volume(text):
             else:
                 value = float(match.group(1).replace(',', '.'));
                 unit = match.group(2)
-            if unit in ['l', 'lt']:
+            if unit in ['l', 'lt', 'litre', 'liter']:
                 return value * 1000
-            elif unit == 'kg':
+            elif unit in ['kg', 'kilogram']:
                 return value * 1000
             elif unit == 'oz':
                 return value * 28.35
@@ -39,7 +39,7 @@ def extract_volume(text):
                 return value * 29.57
             elif unit == 'lb':
                 return value * 453.59
-            elif unit == 'm':
+            elif unit in ['m', 'metre', 'meter']:
                 return value * 100
             elif unit == 'in':
                 return value * 2.54
@@ -106,9 +106,9 @@ for i, row in tqdm(df.iterrows(), total=len(df), desc="Eşleştirme yapılıyor"
     source_volume = row['volume_productmain']
 
     # ----------------------------------------------------
-    # faissle en yakın 3 eşleşmeyi bul
-    K = 3
-    distances, indices = index_sbert.search(source_sbert_vector, K)
+    # faissle en yakın 3-5 eşleşmeyi bul
+    K = 5
+    distances, indices = index_sbert.search(source_sbert_vector, K) #asıl arama burada gerçekleşir
     candidate_indices = indices[0]  # en iyi 3 adayın indeksleri
 
     best_final_score = -1.0  # en düşük skor
@@ -116,7 +116,7 @@ for i, row in tqdm(df.iterrows(), total=len(df), desc="Eşleştirme yapılıyor"
 
     # 3 adayı döngüye al
     for candidate_idx in candidate_indices:
-        # geçersiz indeksleri yoksay
+        # geçersiz indeksleri yoksay()
         if candidate_idx == -1:
             continue
 
@@ -128,14 +128,12 @@ for i, row in tqdm(df.iterrows(), total=len(df), desc="Eşleştirme yapılıyor"
         bm25_scores = bm25.get_scores(source_bm25_query)
         bm25_score = bm25_scores[candidate_idx]
 
-        # BM25 skorları genellikle 0'dan büyük değerler alır. Hibrit skor için normalleştirelim.
-        # Bu basit bir normalleştirme yöntemidir, ihtiyaca göre ayarlanabilir.
-        # Genellikle max skor 10-30 arası olabilir, bu yüzden 10'a bölmek makul bir başlangıç.
-        normalized_bm25_score = 1 - (1 / (1 + bm25_score))  # Sigmoid benzeri normalizasyon
-
+        # bm25 skorlarını normalleştirme adımı.
+        normalized_bm25_score = 1 - (1 / (1 + bm25_score))  # sigmoid function
+        # neden?: SBERT'in 0-1 arasında konuşan diliyle, BM25'in 0'dan 30'a kadar konuşabilen dilini birleştirmek için.
         hybrid_score = 0.6 * sbert_score + 0.4 * normalized_bm25_score
 
-        # 2. Hacim bonus/ceza mantığı
+        #  hacim bonus/ceza mantığı
         target_volume = df.iloc[candidate_idx]['volume_productmatch']
         volume_bonus = 0
         if source_volume and target_volume:
@@ -197,6 +195,5 @@ for i, row in tqdm(df.iterrows(), total=len(df), desc="Eşleştirme yapılıyor"
 
 # output
 match_df = pd.DataFrame(results)
-match_df.to_excel('migrosgtrfinal_bm25.xlsx', index=False)
+match_df.to_excel('migrosgtrfinal_bm250-0505.xlsx', index=False)
 print("done")
-
