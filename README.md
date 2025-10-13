@@ -71,8 +71,8 @@ The script expects an Excel file named `migrosgetir.xlsx` in the root directory 
 
 | Column Name  | Description                                             | Example                     |
 |--------------|---------------------------------------------------------|-----------------------------|
-| productmain  | The source product name (e.g., Migros product catalog). | Ülker Çikolatalı Gofret 5x20g |
-| productmatch | The target product name (e.g., Getir product catalog).  | Ülker Gofret 5'li Paket     |
+| productmain  | The source product name (e.g., Migros product catalog). | Eti Çikolatalı Gofret 5x20g |
+| productmatch | The target product name (e.g., Getir product catalog).  | Eti Gofret 5'li Paket     |
 | productcode  | The unique ID of the target product.                    | GTX12345                    |
 
 ## Running the Script
