@@ -1,5 +1,8 @@
 # AI, NLP & IR Powered Hybrid Product Matching
 
+<img width="1252" height="710" alt="matchingflow" src="https://github.com/user-attachments/assets/8fe19515-eb55-4562-bc66-7b0ee48f6caa" />
+
+
 This repository contains a robust Python script designed for high-accuracy product matching and deduplication between two separate product catalogs from two different e-commerce platforms. Utilizing techniques from Artificial Intelligence (AI), Natural Language Processing (NLP), and Information Retrieval (IR), Machine Learning the script employs a hybrid approach, combining semantic similarity (Sentence Transformers - S-BERT) for conceptual understanding with lexical matching (BM25) for keyword relevance, and further enhances accuracy using volume and unit validation. The use of FAISS ensures fast and scalable retrieval of candidates.
 
 ## Key Features
