@@ -9,8 +9,6 @@ from tqdm import tqdm
 import logging
 import sys
 
-# 1. LOGGING AYARLARI (Gözlemlebilirlik)
-# Kodun ne yaptığını terminalden profesyonelce takip etmek için.
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - [%(levelname)s] - %(message)s',
@@ -40,11 +38,11 @@ class HybridProductMatcher:
             self.device = "cpu"
         logger.info(f"Cihaz kullanılıyor: {self.device}")
 
-        # Embedding Modelini Yükle
+        # embedding modeli
         logger.info(f"Embedding modeli yükleniyor: {embedding_model_name}")
         self.embedder = SentenceTransformer(embedding_model_name, device=self.device)
         
-        # Cross-Encoder (Reranker) Yükle
+        # cross-encoder modeli
         logger.info(f"Reranker modeli yükleniyor: {reranker_model_name}")
         self.reranker = CrossEncoder(reranker_model_name, device=self.device)
         
@@ -75,17 +73,17 @@ class HybridProductMatcher:
         """
         logger.info("Veri havuzu (Corpus) indeksleniyor...")
         
-        # Veriyi temizle ve sakla
+        # data cleaning
         self.corpus_df = df_corpus.copy()
         self.corpus_df[text_column] = self.corpus_df[text_column].fillna("")
         self.corpus_texts = self.corpus_df[text_column].tolist()
         
-        # 1. BM25 İndeksi Oluştur
+        # 1. BM25 indexi oluştur
         logger.info("BM25 indeksi oluşturuluyor...")
         tokenized_corpus = [self._tokenize(doc) for doc in self.corpus_texts]
         self.bm25 = BM25Okapi(tokenized_corpus)
         
-        # 2. FAISS (Vektör) İndeksi Oluştur
+        # 2. Faiss indexi oluştur
         logger.info("Vektör embeddingleri oluşturuluyor (Bu işlem veri boyutuna göre zaman alabilir)...")
         # Batching: Bellek taşmasını önlemek için parça parça encode et
         self.corpus_embeddings = self.embedder.encode(
@@ -96,11 +94,11 @@ class HybridProductMatcher:
             normalize_embeddings=True # Cosine similarity için normalizasyon şart
         )
         
-        # FAISS Index Flat IP (Inner Product) -> Normalize edilmiş vektörlerde Cosine Similarity'e eşittir.
+        # FAISS Index Flat IP , normalize edilmiş vektörlerde Cosine Similarity'e eşittir.
         dimension = self.corpus_embeddings.shape[1]
         self.faiss_index = faiss.IndexFlatIP(dimension)
         
-        # GPU varsa FAISS'i GPU'ya taşı (Opsiyonel, büyük veride hız katar)
+        # GPU varsa faiss'i gpuya taşı.
         if self.device == "cuda":
             try:
                 res = faiss.StandardGpuResources()
@@ -117,15 +115,15 @@ class HybridProductMatcher:
         """
         query_clean = self._preprocess(query)
         
-        # --- ADIM 1: Aday Belirleme (Candidate Generation) ---
+        # --- Aday belirleme
         
-        # A) BM25 ile Adaylar
+        #  BM25 ile Adaylar
         tokenized_query = self._tokenize(query_clean)
         # BM25 skorlarını al, en yüksek k tanesinin indeksini bul
         bm25_scores = self.bm25.get_scores(tokenized_query)
         bm25_top_indices = np.argsort(bm25_scores)[::-1][:top_k_candidates]
         
-        # B) FAISS (BGE-M3) ile Adaylar
+        # FAISS (BGE-M3) ile Adaylar
         query_embedding = self.embedder.encode(
             [query], 
             convert_to_numpy=True, 
@@ -135,10 +133,10 @@ class HybridProductMatcher:
         _, faiss_top_indices = self.faiss_index.search(query_embedding, top_k_candidates)
         faiss_top_indices = faiss_top_indices[0] # Tek sorgu olduğu için 0. index
         
-        # C) Adayları Birleştir (Union - Tekrarları önle)
+        # Adayları birleştir
         candidate_indices = list(set(bm25_top_indices) | set(faiss_top_indices))
         
-        # --- ADIM 2: Cross-Encoder ile Sıralama (Reranking) ---
+        # --- Cross-encoder ile sıralama
         
         # Cross-Encoder için (Query, Document) çiftleri hazırla
         candidates = []
@@ -159,7 +157,6 @@ class HybridProductMatcher:
             reverse=True
         )[:top_n_final]
         
-        # Çıktıyı hazırla
         final_output = []
         for score, idx in results_with_idx:
             row_data = self.corpus_df.iloc[idx]
@@ -187,14 +184,13 @@ class HybridProductMatcher:
         
         all_results = []
         
-        # TQDM barı ile ilerlemeyi göster
+        # bar
         for query in tqdm(query_list, desc="Eşleştiriliyor"):
             
             row = {"productmain": query} # Orijinal sorguyu yaz
             
-            # Veri Validasyonu: Eğer hücre boşsa veya string değilse (NaN), işlemi pas geç ama satırı koru.
+            # data validation
             if not isinstance(query, str) or not query.strip():
-                # Boş satır için boş sütunlar ekle
                 for i in range(1, 4): # Top 3
                     row[f"match_{i}_product"] = None
                     row[f"match_{i}_code"] = None
@@ -208,23 +204,19 @@ class HybridProductMatcher:
                     row[f"match_{rank}_product"] = match["matched_product"]
                     row[f"match_{rank}_code"] = match["matched_code"]
                     
-                    # SKOR DÖNÜŞÜMÜ (Logit -> Yüzde)
-                    # Model ham skor verir, Sigmoid ile % formatına çeviriyoruz.
+                    # sigmoid ile % formatına çeviriyoruz.
                     raw_score = match["match_score"]
                     percentage_score = self._sigmoid(raw_score) * 100
                     
-                    # Excel'de güzel görünmesi için string formatlama: "%98.50"
                     row[f"match_{rank}_score"] = f"%{percentage_score:.2f}"
             
             all_results.append(row)
             
-        # DataFrame oluştur ve kaydet
         df_results = pd.DataFrame(all_results)
         df_results.to_excel(output_file, index=False)
         logger.info(f"Sonuçlar başarıyla kaydedildi: {output_file}")
             
 
-# --- KULLANIM SENARYOSU (MAIN) ---
 
 if __name__ == "__main__":
     
@@ -235,12 +227,8 @@ if __name__ == "__main__":
         # Veriyi oku
         df = pd.read_excel(FILE_PATH)
         
-        # 1. Katalog Verisini Hazırla (Burası aynı kalabilir, arama havuzu temiz olmalı)
         catalog_df = df[["productmatch", "productcode"]].dropna(subset=["productmatch"]).drop_duplicates(subset=["productmatch"]).reset_index(drop=True)
         
-        # 2. Sorgu Verisini Hazırla - DEĞİŞİKLİK BURADA
-        # .dropna() veya .unique() YAPMIYORUZ.
-        # Böylece Excel'deki 5. satır neyse, çıktıda da 5. satır o olacak.
         queries = df["productmain"].tolist()
         
         if len(catalog_df) == 0:
@@ -248,10 +236,9 @@ if __name__ == "__main__":
         else:
             matcher = HybridProductMatcher()
             
-            # Modeli Eğit
+            # Model eğitimi
             matcher.fit(catalog_df, text_column="productmatch", code_column="productcode")
             
-            # Eşleştirmeyi Başlat
             matcher.batch_process(queries, OUTPUT_PATH)
             
     except Exception as e:
